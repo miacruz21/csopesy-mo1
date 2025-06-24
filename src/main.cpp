@@ -1,7 +1,10 @@
 #include "cli/console.hpp"
 #include <iostream>
 
+void enable_virtual_terminal_processing();
+
 int main() {
+    enable_virtual_terminal_processing();
     try {
         Console console;
         console.run();
