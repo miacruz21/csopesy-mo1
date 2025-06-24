@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build C++",
+      "type": "shell",
+      "command": "C:/msys64/ucrt64/bin/g++.exe",
+      "args": [
+                "-std=c++17",
+                "-g",
+                "-Iinclude",
+                "src/main.cpp",
+                "src/cli/console.cpp",
+                "src/core/config_manager.cpp",
+                "src/core/cpu_utilization.cpp",
+                "src/core/instruction.cpp",
+                "src/core/process.cpp",
+                "src/core/process_manager.cpp",
+                "src/core/scheduler.cpp",
+                "-o",
+                "csopesy.exe"
+            ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"]
+    }
+  ]
+}
