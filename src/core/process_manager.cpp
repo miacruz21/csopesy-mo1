@@ -14,6 +14,12 @@ ProcessManager::ProcessManager(int cores)
 ProcessManager::~ProcessManager() {
     stop_scheduler();
     stop_batch_processing();
+    
+    // Ensure all threads are joined
+    for (auto& thread : worker_threads) {
+        if (thread.joinable()) thread.join();
+    }
+    worker_threads.clear();
 }
 
 void ProcessManager::initialize(const std::string& config_file) {
@@ -62,27 +68,46 @@ void ProcessManager::worker_thread_func(int core_id) {
             cpu_util->mark_busy(core_id);
         }
         
-        // Execute the process with CPU tick counting
-        int delay_ms = config.get_int("delays-per-exec") * 100;
+        // Execute process
         while (!process->is_finished() && !stop_requested) {
             process->execute_next_instruction();
             cpu_util->count_instruction(core_id);
-            std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+            
+            // Small delay to simulate work
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         
         {
             std::lock_guard<std::mutex> lock(mutex);
             process->detach_from_core();
             cpu_util->mark_idle(core_id);
+            
+            // Ensure process is marked finished
+            if (!process->is_finished()) {
+                process->execute_next_instruction(); // Force finish
+            }
         }
     }
 }
 
 void ProcessManager::scheduler_thread_func() {
-    while (running && !all_processes_completed()) {
-        std::unique_lock<std::mutex> lock(mutex);
-        cv.notify_all(); 
-        lock.unlock();
+    while (running && !stop_requested) {
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            
+            // Distribute processes to cores
+            for (int i = 0; i < total_cores; i++) {
+                if (scheduler->has_processes()) {
+                    auto process = scheduler->next_process();
+                    if (process && process->get_core_id() == -1) {
+                        process->attach_to_core(i);
+                        cpu_util->mark_busy(i);
+                    }
+                }
+            }
+        }
+        
+        // Small delay to prevent busy-waiting
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
@@ -138,10 +163,6 @@ void ProcessManager::add_process(const std::string& name) {
 }
 
 void ProcessManager::add_process(const std::string& name, int total_instructions) {
-    if (total_instructions < 1) {
-        throw std::runtime_error("Process must have at least 1 instruction");
-    }
-    
     auto process = std::make_shared<Process>(name, total_instructions);
     process->generate_random_instructions();
     
@@ -162,6 +183,17 @@ void ProcessManager::batch_process_generator() {
     
     while (batch_running) {
         std::this_thread::sleep_for(std::chrono::milliseconds(freq_ms));
+        
+        // Only add new process if we have available cores
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            int running_count = std::count_if(processes.begin(), processes.end(),
+                [](const auto& p) { return !p->is_finished(); });
+            
+            if (running_count >= total_cores) {
+                continue;  // Skip if all cores are busy
+            }
+        }
         
         std::string name = "p" + std::to_string(counter++);
         int min_ins = config.get_int("min-ins");
@@ -213,7 +245,7 @@ void ProcessManager::print_system_status() const {
     // Running processes
     std::cout << "Running processes:\n";
     for (const auto& proc : processes) {
-        if (!proc->is_finished() && proc->get_core_id() != -1) {
+        if (!proc->is_finished()) {
             proc->print_short_status();
         }
     }

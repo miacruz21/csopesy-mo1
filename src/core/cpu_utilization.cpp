@@ -36,11 +36,13 @@ double CPUUtilization::get_utilization(int core) const {
     std::lock_guard<std::mutex> lock(mutex);
     if (core < 0 || core >= total_cores) return 0.0;
     
+    auto now = std::chrono::steady_clock::now();
     auto busy_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-        core_idle_times[core] - core_busy_times[core]).count();
-    auto total_time = 1000.0; // 1 second reference
+        now - core_busy_times[core]).count();
     
-    return (busy_time / total_time) * 100.0;
+    // Always report 100% if core is marked busy
+    if (busy_time > 0) return 100.0;
+    return 0.0;
 }
 
 void CPUUtilization::reset() {

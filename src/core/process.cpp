@@ -172,7 +172,7 @@ void Process::print_short_status() const {
     std::strftime(time_str, sizeof(time_str), "%m/%d/%Y %I:%M:%S%p", std::localtime(&created_time));
     
     std::cout << std::setw(12) << std::left << name
-              << " (" << format_time(created_time) << ") ";
+              << " (" << time_str << ") ";
     
     if (finished) {
         std::cout << "Finished   ";
