@@ -51,13 +51,42 @@ void ConfigManager::load(const std::string& filename) {
         throw std::runtime_error("Invalid scheduler type. Must be 'fcfs' or 'rr'");
     }
 
-    // Validate numeric parameters
+   // Validate numeric parameters
     try {
         int num_cpu = std::stoi(temp_config["num-cpu"]);
         if (num_cpu < 1 || num_cpu > 128) {
             throw std::runtime_error("num-cpu must be between 1 and 128");
-        }
+    }
 
+    int batch_freq = std::stoi(temp_config["batch-process-freq"]);
+    if (batch_freq < 1) {
+        throw std::runtime_error("batch-process-freq must be at least 1");
+    }
+
+    int min_ins = std::stoi(temp_config["min-ins"]);
+    if (min_ins < 1) {
+        throw std::runtime_error("min-ins must be at least 1");
+    }
+
+    int max_ins = std::stoi(temp_config["max-ins"]);
+    if (max_ins < 1) {
+        throw std::runtime_error("max-ins must be at least 1");
+    }
+    if (max_ins < min_ins) {
+        throw std::runtime_error("max-ins cannot be less than min-ins");
+    }
+
+    int delays = std::stoi(temp_config["delays-per-exec"]);
+    if (delays < 0) {
+        throw std::runtime_error("delays-per-exec cannot be negative");
+    }
+
+    if (scheduler_type == "rr") {
+        int quantum = std::stoi(temp_config["quantum-cycles"]);
+        if (quantum < 1) {
+            throw std::runtime_error("quantum-cycles must be at least 1 for RR scheduler");
+        }
+    }
         // Similar validation for other numeric parameters...
     } catch (const std::invalid_argument&) {
         throw std::runtime_error("Invalid numeric value in config");
