@@ -1,115 +1,103 @@
-#include "core/config_manager.hpp"
+#include "config_manager.h"
+#include <iostream>
 #include <fstream>
 #include <sstream>
-#include <vector>
-#include <ranges>
-#include <algorithm>
+#include <limits>
+#include <cstdint>
+#include <stdexcept>
 
-void ConfigManager::load(const std::string& filename) {
+bool ConfigManager::load(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
-        throw std::runtime_error("Could not open config file: " + filename);
+        std::cerr << "Failed to open config file: " << filename << "\n";
+        return false;
     }
-
-    std::unordered_map<std::string, std::string> temp_config;
     std::string line;
-    
     while (std::getline(file, line)) {
-        // Remove comments
-        size_t comment_pos = line.find('#');
-        if (comment_pos != std::string::npos) {
-            line = line.substr(0, comment_pos);
-        }
+        // Remove comments and trailing/leading whitespace
+        size_t comment = line.find('#');
+        if (comment != std::string::npos) line = line.substr(0, comment);
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+
+        if (line.empty()) continue;
 
         std::istringstream iss(line);
         std::string key, value;
-        if (iss >> key && std::getline(iss >> std::ws, value)) {
-            // Remove surrounding quotes if present
-            if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
-                value = value.substr(1, value.size() - 2);
+        iss >> key >> value;
+        if (key.empty() || value.empty()) continue;
+
+        if (key == "num-cpu") {
+            int v = std::stoi(value);
+            if (v < 1 || v > 128) {
+                std::cerr << "num-cpu must be in [1, 128].\n";
+                return false;
             }
-            temp_config[key] = value;
+            values["num-cpu"] = std::to_string(v);
+        }
+        else if (key == "scheduler") {
+            if (value != "fcfs" && value != "rr") {
+                std::cerr << "scheduler must be 'fcfs' or 'rr'.\n";
+                return false;
+            }
+            values["scheduler"] = value;
+        }
+        else if (key == "quantum-cycles") {
+            uint64_t v = std::stoull(value);
+            if (v < 1 || v > UINT32_MAX) {
+                std::cerr << "quantum-cycles must be in [1, 2^32].\n";
+                return false;
+            }
+            values["quantum-cycles"] = std::to_string(v);
+        }
+        else if (key == "batch-process-freq") {
+            uint64_t v = std::stoull(value);
+            if (v < 1 || v > UINT32_MAX) {
+                std::cerr << "batch-process-freq must be in [1, 2^32].\n";
+                return false;
+            }
+            values["batch-process-freq"] = std::to_string(v);
+        }
+        else if (key == "min-ins") {
+            uint64_t v = std::stoull(value);
+            if (v < 1 || v > UINT32_MAX) {
+                std::cerr << "min-ins must be in [1, 2^32].\n";
+                return false;
+            }
+            values["min-ins"] = std::to_string(v);
+        }
+        else if (key == "max-ins") {
+            uint64_t v = std::stoull(value);
+            if (v < 1 || v > UINT32_MAX) {
+                std::cerr << "max-ins must be in [1, 2^32].\n";
+                return false;
+            }
+            values["max-ins"] = std::to_string(v);
+        }
+        else if (key == "delays-per-exec") {
+            uint64_t v = std::stoull(value);
+            if (v > UINT32_MAX) {
+                std::cerr << "delays-per-exec must be in [0, 2^32].\n";
+                return false;
+            }
+            values["delays-per-exec"] = std::to_string(v);
+        }
+        else {
+            std::cerr << "Unknown config parameter: " << key << "\n";
+            return false;
         }
     }
-
-    // Validate required parameters
-    const std::vector<std::string> required_params = {
-        "num-cpu", "scheduler", "quantum-cycles", 
-        "batch-process-freq", "min-ins", "max-ins", "delays-per-exec"
-    };
-
-    for (const auto& param : required_params) {
-        if (temp_config.find(param) == temp_config.end()) {
-            throw std::runtime_error("Missing required config parameter: " + param);
-        }
-    }
-
-    // Validate scheduler type
-    std::string scheduler_type = temp_config["scheduler"];
-    std::transform(scheduler_type.begin(), scheduler_type.end(), scheduler_type.begin(), ::tolower);
-    if (scheduler_type != "fcfs" && scheduler_type != "rr") {
-        throw std::runtime_error("Invalid scheduler type. Must be 'fcfs' or 'rr'");
-    }
-
-   // Validate numeric parameters
-    try {
-        int num_cpu = std::stoi(temp_config["num-cpu"]);
-        if (num_cpu < 1 || num_cpu > 128) {
-            throw std::runtime_error("num-cpu must be between 1 and 128");
-    }
-
-    int batch_freq = std::stoi(temp_config["batch-process-freq"]);
-    if (batch_freq < 1) {
-        throw std::runtime_error("batch-process-freq must be at least 1");
-    }
-
-    int min_ins = std::stoi(temp_config["min-ins"]);
-    if (min_ins < 1) {
-        throw std::runtime_error("min-ins must be at least 1");
-    }
-
-    int max_ins = std::stoi(temp_config["max-ins"]);
-    if (max_ins < 1) {
-        throw std::runtime_error("max-ins must be at least 1");
-    }
-    if (max_ins < min_ins) {
-        throw std::runtime_error("max-ins cannot be less than min-ins");
-    }
-
-    int delays = std::stoi(temp_config["delays-per-exec"]);
-    if (delays < 0) {
-        throw std::runtime_error("delays-per-exec cannot be negative");
-    }
-
-    if (scheduler_type == "rr") {
-        int quantum = std::stoi(temp_config["quantum-cycles"]);
-        if (quantum < 1) {
-            throw std::runtime_error("quantum-cycles must be at least 1 for RR scheduler");
-        }
-    }
-        // Similar validation for other numeric parameters...
-    } catch (const std::invalid_argument&) {
-        throw std::runtime_error("Invalid numeric value in config");
-    } catch (const std::out_of_range&) {
-        throw std::runtime_error("Numeric value out of range in config");
-    }
-
-    // If all validations pass, update the config
-    config = std::move(temp_config);
+    file.close();
+    return true;
 }
 
 std::string ConfigManager::get(const std::string& key) const {
-    auto it = config.find(key);
-    if (it == config.end()) {
-        throw std::runtime_error("Config key not found: " + key);
-    }
+    auto it = values.find(key);
+    if (it == values.end())
+        throw std::runtime_error("Missing config key: " + key);
     return it->second;
 }
 
-int ConfigManager::get_int(const std::string& key) const {
-    return std::stoi(get(key));
-}
-
-bool ConfigManager::has(const std::string& key) const {
-    return config.find(key) != config.end();
+uint64_t ConfigManager::get_long(const std::string& key) const {
+    return std::stoull(get(key));
 }
