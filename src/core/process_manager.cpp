@@ -71,12 +71,11 @@ void ProcessManager::start_scheduler()
                     std::this_thread::sleep_for(std::chrono::milliseconds(30));
                 }
 
-                p->set_core_id(-1);
-                util.mark_idle(core);                       
-
                 if (!p->is_finished()) {
                     std::lock_guard<std::mutex> lk(procs_mutex);
                     sched->add_process(p);
+                } else {
+                    p->set_core_id(-1);          
                 }
             }
         });
