@@ -174,16 +174,21 @@ void ProcessManager::print_system_status(std::ostream& out) const
 void ProcessManager::print_recent_logs(std::ostream& out,
                                        std::size_t max_lines) const
 {
-    std::vector<std::shared_ptr<Process>> snapshot;
+    std::vector<std::string> all;
     {
         std::lock_guard<std::mutex> lk(procs_mutex);
-        snapshot = procs;             // copy the shared_ptrs
-    }
+        for (const auto& p : procs) {
+            const auto& v = p->recent_logs(max_lines);   
+            all.insert(all.end(), v.begin(), v.end());   
+        }
+    }  
+
+    if (all.size() > max_lines)
+        all.erase(all.begin(), all.end() - max_lines);
 
     out << "\nRecent logs (newest first, max " << max_lines << "):\n";
-    for (auto const& p : snapshot)
-        for (auto const& line : p->recent_logs(max_lines))
-            out << "  " << line << '\n';
+    for (auto it = all.rbegin(); it != all.rend(); ++it)
+        out << "  " << *it << '\n';
 }
 
 void ProcessManager::print_process_lists(std::ostream& out,
