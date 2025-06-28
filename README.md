@@ -85,7 +85,7 @@ csopesy-log.txt   ← utilisation reports
 Mia Bernice Cruz (S13)
 
 
-Rhamon Khayle Del Mundo (S14)
+Rahmon Khayle Del Mundo (S14)
 
 
 
