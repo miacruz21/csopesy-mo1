@@ -1,5 +1,6 @@
 #include "console.h"
 #include "core/process_manager.h"
+#include "core/config_manager.h"
 #include <iostream>
 #include <algorithm>
 #include <iomanip>
@@ -7,6 +8,7 @@
 #include <sstream>
 #include <fstream>
 #include <thread>
+#include <filesystem>
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -124,36 +126,24 @@ void Console::show_help() const
 
 void Console::handle_initialize()
 {
-    try
-    {
-        std::ifstream test("config.txt");
-        if (!test)
-            throw std::runtime_error("config.txt not found in the current directory");
-        test.close();
-
-        config_manager.load("config.txt");
-
-        int num_cpu = static_cast<int>(config_manager.get_long("num-cpu"));
-        std::string scheduler_type = config_manager.get("scheduler");
-        scheduler_type.erase(scheduler_type.find_last_not_of(" \t\n\r\"") + 1);
-        scheduler_type.erase(0, scheduler_type.find_first_not_of(" \t\n\r\""));
-
-        long quantum_cycles = config_manager.get_long("quantum-cycles");
-        long batch_process_freq = config_manager.get_long("batch-process-freq");
-        long min_ins = config_manager.get_long("min-ins");
-        long max_ins = config_manager.get_long("max-ins");
-        long delays_per_exec = config_manager.get_long("delays-per-exec");
-
-        process_manager = std::make_unique<ProcessManager>(num_cpu);
-        process_manager->initialize_scheduler(scheduler_type, static_cast<int>(quantum_cycles));
-        process_manager->set_config_manager(&config_manager);
-        initialized = true;
-        process_manager->start_scheduler(); // <-- ADD THIS LINE
-        std::cout << "System initialized successfully.\n";
-    } catch (...) {
-        initialized = false;
-        throw;
+    /* 1. parse config.txt directly into the member object */
+    if (!config_manager.load("config.txt")) {
+        std::cerr << "initialize failed: bad config\n";
+        return;                                    // abort on error
     }
+
+    /* 2. create ProcessManager using the parsed values */
+    int      num_cpu = static_cast<int>(config_manager.get_long("num-cpu"));
+    auto     sched   = config_manager.get("scheduler");
+    uint64_t quantum = config_manager.get_long("quantum-cycles");
+
+    process_manager = std::make_unique<ProcessManager>(num_cpu);
+    process_manager->set_config_manager(&config_manager);
+    process_manager->initialize_scheduler(sched, quantum);
+    process_manager->start_scheduler();
+    initialized = true;
+
+    std::cout << "System initialized successfully.\n";
 }
 
 void Console::handle_screen_command(const std::string& command) {
@@ -174,8 +164,7 @@ void Console::handle_screen_command(const std::string& command) {
             process_manager->add_process(process_name);
             auto process = process_manager->get_process(process_name);
             if (process && process->is_finished()) {
-                std::cout << "Process " << process_name << " not found.\n";
-                return;
+                in_process_screen = true;    
             }
             in_process_screen = true;
             current_process_name = process_name;
@@ -220,7 +209,11 @@ void Console::enter_process_screen(const std::string& process_name) {
 
     while (in_process_screen) {
         process->print_smi_info();
-        print_prompt(); // prints [PROCESS]>
+        if (process->is_finished()) {
+            std::cout << "\nProcess finished – leaving screen.\n";
+            break;
+        }
+        print_prompt();
         std::string input;
         if (!std::getline(std::cin, input)) break;
 
@@ -247,10 +240,26 @@ void Console::exit_process_screen() {
     print_header();
 }
 
+void Console::stop()
+{
+    if (process_manager)   
+        process_manager->shutdown();
+    exit_requested = true;      
+}
+
 void Console::handle_report_command()
 {
+    if (!process_manager) {
+        std::cout << "System not initialized.\n";
+        return;
+    }
+
     process_manager->generate_utilization_report();
-    std::cout << "Report generated and saved to csopesy-log.txt\n";
+
+    // Echo same info to console so users see it immediately
+    std::ostringstream oss;
+    process_manager->print_system_status(oss);   // already exists
+    std::cout << oss.str();
 }
 
 void Console::handle_scheduler_start()
@@ -296,17 +305,18 @@ void Console::run() {
     clear_screen();
     print_header();
     std::string input;
+    std::string line;
+    std::filesystem::create_directory("logs");
 
-    while (true) {
+    while (!exit_requested) {
         if (in_process_screen) {
             enter_process_screen(current_process_name);
             continue;
         }
 
-        print_prompt(); // [MAIN]>
+        print_prompt();
         if (!std::getline(std::cin, input)) break;
 
-        // Clean whitespace
         input.erase(0, input.find_first_not_of(" \t\n\r"));
         input.erase(input.find_last_not_of(" \t\n\r") + 1);
         if (input.empty()) continue;
@@ -314,13 +324,22 @@ void Console::run() {
         std::string command_base = input.substr(0, input.find(' '));
         std::transform(command_base.begin(), command_base.end(), command_base.begin(), ::tolower);
 
-        // ENFORCE: Only allow initialize and help if not initialized
         if ((!process_manager || !initialized) && command_base != "initialize" && command_base != "help") {
             std::cout << "System not initialized. Please run 'initialize' first.\n";
             continue;
         }
-        if (command_base == "exit") break;
-        if (command_base == "initialize") handle_initialize();
+        if (command_base == "exit") {
+            stop();
+        }
+        if (command_base == "initialize") {
+            try {
+                handle_initialize();                
+            } catch (const std::exception& ex) {
+                std::cerr << "INITIALISE ERROR: "  
+                        << ex.what() << '\n';
+            }
+            continue;
+        }
         else if (command_base == "help") show_help();
         else if (command_base == "clear") clear_screen();
         else if (command_base == "screen") handle_screen_command(input);

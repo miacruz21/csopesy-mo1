@@ -5,16 +5,22 @@
 #include "core/process_manager.h"
 #include "core/config_manager.h"
 
+class ProcessManager;
+class ConfigManager;
+
 class Console {
 public:
     Console();
     void run();
-    static const std::string HEADER;
+    void stop();
+    
 private:
+    static const std::string HEADER;
     std::unique_ptr<ProcessManager> process_manager;
     ConfigManager config_manager;
     bool initialized = false;
     bool in_process_screen = false;
+    bool exit_requested     = false;
     std::string current_process_name;
     bool enable_colors = true;
 
@@ -39,11 +45,11 @@ private:
     void handle_scheduler_start();
     void handle_scheduler_stop();
     void handle_process_command(const std::string& input);
-
-    // Process screen logic
     void enter_process_screen(const std::string& process_name);
     void exit_process_screen();
 
     // Helpers
     std::vector<std::string> split(const std::string& s);
+    void handle_report_util();
+
 };

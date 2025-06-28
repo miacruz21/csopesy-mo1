@@ -3,53 +3,60 @@
 #include <vector>
 #include <memory>
 
-class Process;
+class Process;            
 
-struct Instruction {
+class Instruction {
+public:
     virtual ~Instruction() = default;
-    virtual void execute(Process& p) = 0;
-    virtual std::string to_string() const = 0;
+
+    // run one step on a Process
+    virtual void execute(Process&) = 0;
+
+    // short opcode name for logging  (NEW)
+    virtual const char* tag() const = 0;
 };
 
-struct PrintInst : Instruction {
+
+class PrintInst : public Instruction {
     std::string msg;
-    PrintInst(std::string m) : msg(std::move(m)) {}
-    void execute(Process& p) override;
-    std::string to_string() const override { return "PRINT(" + msg + ")"; }
+public:
+    explicit PrintInst(std::string m) : msg(std::move(m)) {}
+    void        execute(Process& p) override;
+    const char* tag() const override;             // "PRINT"
 };
 
-struct DeclareInst : Instruction {
-    std::string var;
-    int val;
-    DeclareInst(std::string v, int x) : var(std::move(v)), val(x) {}
-    void execute(Process& p) override;
-    std::string to_string() const override { return "DECLARE(" + var + "," + std::to_string(val) + ")"; }
+class DeclInst : public Instruction {
+    std::string var; int value;
+public:
+    DeclInst(std::string v, int val) : var(std::move(v)), value(val) {}
+    void        execute(Process& p) override;
+    const char* tag() const override;             // "DECL"
 };
 
-struct MathInst : Instruction {
-    bool is_add;
+class MathInst : public Instruction {
     std::string dest, op1, op2;
-    MathInst(bool a, std::string d, std::string o1, std::string o2)
-      : is_add(a), dest(std::move(d)), op1(std::move(o1)), op2(std::move(o2)) {}
-    void execute(Process& p) override;
-    std::string to_string() const override {
-        return (is_add ? "ADD" : "SUB") + std::string("(") + dest + "," + op1 + "," + op2 + ")";
-    }
+    bool is_add;                                  // true=ADD, false=SUB
+public:
+    MathInst(std::string d,std::string a,std::string b,bool add)
+        : dest(std::move(d)), op1(std::move(a)), op2(std::move(b)), is_add(add) {}
+    void        execute(Process& p) override;
+    const char* tag() const override;             // "ADD"/"SUB"
 };
 
-struct SleepInst : Instruction {
+class SleepInst : public Instruction {
     int ticks;
-    explicit SleepInst(int t): ticks(t) {}
-    void execute(Process& p) override;
-    std::string to_string() const override { return "SLEEP(" + std::to_string(ticks) + ")"; }
+public:
+    explicit SleepInst(int t) : ticks(t) {}
+    void        execute(Process& p) override;
+    const char* tag() const override;             // "SLEEP"
 };
 
-struct ForInst : Instruction {
+class ForInst : public Instruction {
+    int repeats, current = 0, index = 0;
     std::vector<std::unique_ptr<Instruction>> body;
-    int repeats;
-    mutable int current = 0, index = 0;
-    ForInst(std::vector<std::unique_ptr<Instruction>> b, int r)
-      : body(std::move(b)), repeats(r) {}
-    void execute(Process& p) override;
-    std::string to_string() const override { return "FOR(...," + std::to_string(repeats) + ")"; }
+public:
+    ForInst(int r, std::vector<std::unique_ptr<Instruction>> b)
+        : repeats(r), body(std::move(b)) {}
+    void        execute(Process& p) override;
+    const char* tag() const override;             // "FOR"
 };

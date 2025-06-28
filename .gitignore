@@ -2,3 +2,4 @@ settings.json
 csopesy.exe
 *.txt
 *.patch
+tests/

@@ -18,6 +18,7 @@
           "src/core/process_manager.cpp",
           "src/core/scheduler.cpp",
           "src/core/logger.cpp",
+          "src/core/time_utils.cpp",
           "-o",
           "csopesy.exe"
       ],
@@ -26,6 +27,31 @@
         "isDefault": true
       },
       "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Run Basic Harness",
+      "type": "process",                       // ← bypass Windows cmd.exe
+      "command": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "args": [
+        "-c",                                  // let Bash run a command string
+        "./tests/run_basic.sh"                 // POSIX path, relative, quoted
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"            // run from repo root
+      },
+      "problemMatcher": [],
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "reveal": "always" }
+    },
+    {
+      "label": "Run Deep Harness",
+      "type": "process",
+      "command": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "args": ["-c", "./tests/run_deep.sh"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "group": { "kind": "test", "isDefault": false },
+      "presentation": { "reveal": "always" }
     }
-  ]
+  ],
 }

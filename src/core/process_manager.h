@@ -30,11 +30,13 @@ public:
     void print_system_status(std::ostream& out) const;
     void print_system_status() const;
     void generate_utilization_report() const;
-
+    void shutdown();   
 private:
     mutable std::mutex procs_mutex;
     std::vector<std::shared_ptr<Process>> procs;
     std::unique_ptr<SchedulerBase> sched;
+    uint64_t rr_quantum_cycles_ = 1;
+    bool scheduler_is_rr_   = false;
     ConfigManager* cfg = nullptr;
     CPUUtilization util;
     std::atomic<bool> running = false;

@@ -22,6 +22,7 @@ class Process {
     std::string created_time;
     std::string start_time;
     std::string finished_time;
+    std::ofstream log_stream; 
 public:
     Process() = default;
     Process(std::string name, int id, int min_ins, int max_ins, int delay);
@@ -39,7 +40,6 @@ public:
     int get_core_id() const { return core_id; }
     void set_core_id(int c) { core_id = c; }
     const std::vector<std::string>& get_logs() const { return logs; }
-    void save_logs_to_file() const;
     std::string get_created_time() const { return created_time; }
     std::string get_start_time() const { return start_time; }
     std::string get_finished_time() const { return finished_time; }

@@ -1,5 +1,6 @@
 #include "process_manager.h"
 #include "process.h"
+#include "time_utils.h"
 #include <chrono>
 #include <iostream>
 #include <iomanip>
@@ -7,9 +8,8 @@
 #include <algorithm>
 #include <filesystem>
 
-
-// Make sure you have this globally
 extern std::atomic<uint64_t> cpu_cycles_counter;
+
 
 static std::string format_percent(double v) {
     std::ostringstream oss;
@@ -30,10 +30,14 @@ void ProcessManager::set_config_manager(ConfigManager *c) { cfg = c; }
 
 void ProcessManager::initialize_scheduler(const std::string &alg, uint64_t quantum)
 {
-    if (alg == "fcfs")
+    if (alg == "fcfs") {
         sched = std::make_unique<FCFSScheduler>();
-    else
+        scheduler_is_rr_ = false;
+    } else {
         sched = std::make_unique<RRScheduler>(quantum);
+        scheduler_is_rr_   = true;
+        rr_quantum_cycles_ = quantum;
+    }
 }
 
 void ProcessManager::start_scheduler()
@@ -44,25 +48,26 @@ void ProcessManager::start_scheduler()
         while (running) {
             cpu_cycles_counter++;
             std::shared_ptr<Process> p;
-            uint64_t quantum = 1;
-            if (cfg && cfg->get("scheduler") == "rr") quantum = cfg->get_long("quantum-cycles");
+            uint64_t quantum = scheduler_is_rr_ ? rr_quantum_cycles_ : 1;
             {
                 std::lock_guard<std::mutex> lk(procs_mutex);
-                if (sched && sched->has_processes())
+                if (sched != nullptr && sched->has_processes())
                     p = sched->next_process();
             }
             if (p) {
+                util.mark_busy(0);
                 for (uint64_t i = 0; i < quantum && !p->is_finished(); ++i) {
                     p->run_one_tick();
-                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(30));
                 }
+                util.mark_idle(0);  
                 if (!p->is_finished()) {
                     std::lock_guard<std::mutex> lk(procs_mutex);
                     sched->add_process(p);
                 }
             }
             else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                std::this_thread::sleep_for(std::chrono::milliseconds(30));
             }
 
         } });
@@ -89,7 +94,7 @@ void ProcessManager::start_batch_processing()
                                {
         while (batching) {
             if ((cpu_cycles_counter % freq) == 0) {
-                std::string name = "p" + std::to_string(next_id++);
+                std::string name = "p" + std::to_string(next_id);
                 auto p = std::make_shared<Process>(name, next_id++, min_ins, max_ins, delay);
                 {
                     std::lock_guard<std::mutex> lk(procs_mutex);
@@ -97,7 +102,7 @@ void ProcessManager::start_batch_processing()
                     if (sched) sched->add_process(p);
                 }
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
         } });
 }
 
@@ -206,7 +211,19 @@ void ProcessManager::print_system_status() const {
 
 void ProcessManager::generate_utilization_report() const
 {
-    std::ofstream ofs("csopesy-log.txt");
-    print_system_status(ofs);
-    ofs << "Report generated at: " << std::filesystem::absolute("csopesy-log.txt") << "\n";
+    std::ofstream ofs("csopesy-log.txt", std::ios::app);
+    ofs << "CPU utilization: " << std::fixed << std::setprecision(1)
+    << util.get_utilization_percent() << "%\n"
+    << "Cores used: "      << util.get_busy_cores()      << '\n'
+    << "Cores available: " << util.get_available_cores() << "\n\n";
+}
+
+void ProcessManager::shutdown()
+{
+    running = false;                  
+    if (sched_thread.joinable())
+        sched_thread.join();
+
+    if (batch_thread.joinable())
+        batch_thread.join();
 }
