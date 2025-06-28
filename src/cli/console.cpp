@@ -154,7 +154,8 @@ void Console::handle_screen_ls()
         std::cout << "System not initialized.\n";
         return;
     }
-    std::cout << banner();
+    clear_screen();
+    print_header();
     print_process_summary(std::cout);
 }
 
@@ -164,8 +165,8 @@ void Console::handle_report_util()
         std::cout << "System not initialized.\n";
         return;
     }
-
-    std::cout << banner();
+    clear_screen();
+    print_header();
     print_process_summary(std::cout);
 
     std::ofstream ofs("csopesy-log.txt", std::ios::app);
@@ -242,6 +243,7 @@ void Console::enter_process_screen(const std::string& process_name) {
     if (process->is_finished()) {
         std::cout << "Process " << process_name << " has finished execution.\n";
         in_process_screen = false;
+        print_header();
         return;
     }
 
@@ -269,13 +271,18 @@ void Console::enter_process_screen(const std::string& process_name) {
             std::cout << "Invalid command. Use 'process-smi' or 'exit'.\n";
         }
     }
+
+    if (!in_process_screen) {
+        clear_screen();
+        print_header();
+        print_prompt();            
+    }
 }
 
 void Console::exit_process_screen() {
     in_process_screen = false;
     current_process_name.clear();
     clear_screen();
-    print_header();
 }
 
 void Console::stop()
