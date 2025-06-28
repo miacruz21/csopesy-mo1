@@ -1,5 +1,5 @@
 # CSOPESY MO1 – CPU OS Emulator  
-*Cruz, Mia Bernice  •  Del Mundo, Rhamon Khayle*  
+*Cruz, Mia Bernice  •  Del Mundo, Rahmon Khayle*  
 
 ---
 
@@ -31,6 +31,7 @@ g++ -std=c++17 -Isrc ^
 
 ## 3. Entry Point
 File: `src/main.cpp`
+
 Function:
 ```bash
 #include "cli/console.h"
@@ -42,6 +43,50 @@ int main() {
 ```
 
 ## 4. Primary Commands
+
+`initialize`:    Parse config.txt, create `ProcessManager`, start scheduler
+
+`screen -s <name>`:    Spawn & attach to a new process screen
+
+`screen -r <name>`:    Re-attach to an existing running process
+
+`screen -ls`:    	Utilisation + running/finished tables
+
+`scheduler-start` / `scheduler/stop`:    Toggle automatic batch-process thread
+
+`report-uti`:    	Print and append CPU-utilisation block to csopesy-log.txt
+
+`help`:    Brief command list
+
+`exit`:    Shutdown
+
+
+## 5. Project Layout
+
+```bash
+src/
+ ├── cli/console.{h,cpp}       ← UI, command loop
+ ├── core/
+ │    ├── process.{h,cpp}      ← code[], pc, vars, per-tick logging
+ │    ├── process_manager.{h,cpp}
+ │    ├── scheduler.{h,cpp}    ← FCFS & RR
+ │    ├── instruction.{h,cpp}  ← PRINT, DECL, ADD, SUB, SLEEP, FOR
+ │    ├── config_manager.{h,cpp}
+ │    └── cpu_utilization.{h,cpp}
+ ├── common/time_utils.{h,cpp}
+ └── main.cpp                  ← entry
+
+logs/             ← generated p<N>.txt per process  
+csopesy-log.txt   ← utilisation reports
+```
+
+## 6. Authors
+
+Mia Bernice Cruz (S13)
+
+
+Rahmon Khayle Del Mundo (S14)
+
 
 
 
