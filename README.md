@@ -45,12 +45,19 @@ int main() {
 ## 4. Primary Commands
 
 `initialize`:    Parse config.txt, create `ProcessManager`, start scheduler
+
 `screen -s <name>`:    Spawn & attach to a new process screen
+
 `screen -r <name>`:    Re-attach to an existing running process
+
 `screen -ls`:    	Utilisation + running/finished tables
+
 `scheduler-start` / `scheduler/stop`:    Toggle automatic batch-process thread
+
 `report-uti`:    	Print and append CPU-utilisation block to csopesy-log.txt
+
 `help`:    Brief command list
+
 `exit`:    Shutdown
 
 
