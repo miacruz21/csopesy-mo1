@@ -1,5 +1,5 @@
 # CSOPESY MO1 – CPU OS Emulator  
-*Cruz, Mia Bernice  •  Del Mundo, Rhamon Khayle*  
+*Cruz, Mia Bernice  •  Del Mundo, Rahmon Khayle*  
 
 ---
 
