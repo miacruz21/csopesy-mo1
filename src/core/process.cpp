@@ -1,5 +1,6 @@
 #include "process.h"
 #include "instruction.h"
+#include "config_manager.h"
 #include "time_utils.h"
 #include <chrono>
 #include <filesystem>
@@ -10,52 +11,65 @@
 #include <random>
 #include <sstream>
 #include <algorithm>
-#include "config_manager.h"
+#include <unordered_map>
+
+// Process::Process(std::string name_, int id_,
+//                  int /*min_ins*/, int /*max_ins*/, int /*delay*/)
+//     : name(std::move(name_)), id(id_)
+// {
+//     vars["x"] = vars["y"] = vars["z"] = 0;
+
+//     std::vector<std::unique_ptr<Instruction>> loopBody;
+//     loopBody.emplace_back(std::make_unique<MathInst>("x", "x", "1", true));
+//     loopBody.emplace_back(std::make_unique<PrintInst>("Value from: +x"));
+//     loopBody.emplace_back(std::make_unique<MathInst>("y", "y", "1", true));
+//     loopBody.emplace_back(std::make_unique<PrintInst>("Value from: +y"));
+//     loopBody.emplace_back(std::make_unique<MathInst>("z", "z", "1", true));
+//     loopBody.emplace_back(std::make_unique<PrintInst>("Value from: +z"));
+
+//     code.clear();
+//     code.emplace_back(
+//         std::make_unique<ForInst>(100, std::move(loopBody)));
+// }
 
 Process::Process(std::string name_, int id_,
                  int min_ins, int max_ins, int delay)
     : name(std::move(name_)), id(id_)
 {
-    created_time = util::now_time();
-
-    /* ── build random program ───────────────────────────── */
-    std::mt19937 rng(
-        static_cast<unsigned>(std::chrono::system_clock::now()
-                                  .time_since_epoch()
-                                  .count()) +
-        id);
-
+    std::mt19937 rng(std::random_device{}());
     std::uniform_int_distribution<int> icount(min_ins, max_ins);
-    int N = icount(rng);
 
-    std::vector<std::string> var_names;
-    int var_count = 0;
+    const int N = icount(rng);              
+    int var_count = 0;                      
+    std::vector<std::string> var_names;    
 
     for (int i = 0; i < N; ++i) {
-        if (i % 2 == 0) {                    // PRINT every other step
-            code.push_back(
-                std::make_unique<PrintInst>("Step " + std::to_string(i + 1) +
-                                             " of " + name));
+        if (i % 2 == 0) {
+            code.push_back(std::make_unique<PrintInst>(
+                "Step " + std::to_string(i + 1) + " of " + name));
             continue;
         }
+
         int t = rng() % 4;
-        if (t == 0) {                        // DECL
+
+        if (t == 0) {                                 
             std::string v = "v" + std::to_string(var_count++);
             int val       = rng() % 100;
             var_names.push_back(v);
             code.push_back(std::make_unique<DeclInst>(v, val));
-        } else if (t == 1 || t == 2) {       // ADD / SUB
+
+        } else if (t == 1 || t == 2) {                  
             std::string dest = "v" + std::to_string(rng() % (var_count + 1));
-            std::string op1 =
-                var_names.empty() ? "0"
-                                  : var_names[rng() % var_names.size()];
-            std::string op2 = std::to_string(rng() % 50);
-            bool is_add     = (t == 1);
+            std::string op1  = var_names.empty()
+                             ? "0" : var_names[rng() % var_names.size()];
+            std::string op2  = std::to_string(rng() % 50);
+            bool is_add      = (t == 1);
             code.push_back(
                 std::make_unique<MathInst>(dest, op1, op2, is_add));
-        } else {                             // FOR loop of SLEEPs
-            int repeats = 1 + rng() % 2;
-            int looplen = 1 + rng() % 2;
+
+        } else {                                        
+            int repeats = 1 + rng() % 2;               
+            int looplen = 1 + rng() % 2;                
             std::vector<std::unique_ptr<Instruction>> body;
             for (int j = 0; j < looplen; ++j)
                 body.push_back(
@@ -64,15 +78,15 @@ Process::Process(std::string name_, int id_,
                 std::make_unique<ForInst>(repeats, std::move(body)));
         }
     }
-    if (std::none_of(code.begin(), code.end(), [](auto &up) {
-            return dynamic_cast<PrintInst *>(up.get()) != nullptr;
-        })) {
-        code.insert(code.begin(),
-                    std::make_unique<PrintInst>("Auto: Hello from " + name));
-    }
 
-    std::filesystem::create_directories("logs");
-    log_stream.open("logs/" + name + ".txt", std::ios::app);
+    bool has_print =
+        std::any_of(code.begin(), code.end(), [](const auto& up) {
+            return dynamic_cast<PrintInst*>(up.get()) != nullptr;
+        });
+    if (!has_print) {
+        code.insert(code.begin(),
+            std::make_unique<PrintInst>("Auto: Hello from " + name));
+    }
 }
 
 void Process::run_one_tick() {
@@ -81,16 +95,15 @@ void Process::run_one_tick() {
     if (sleep_ticks > 0) { --sleep_ticks; return; }
 
     if (pc < code.size()) {
-        auto &inst = code[pc++];
-        inst->execute(*this);
+        const std::size_t this_pc = pc;         
+        auto& inst = code[pc++];
+        inst->execute(*this);                  
 
-        /* ── ensure file is open, then write ── */
-        if (!log_stream.is_open())
-            log_stream.open("logs/" + name + ".txt", std::ios::app);
+        std::ostringstream line;                
+        line << '(' << util::now_time() << ") Core:" << core_id << ' ';
+        line << "PC=" << this_pc << ' ' << inst->tag();
 
-        log_stream << util::now_time()
-                   << " PC=" << (pc - 1) << ' '
-                   << inst->tag() << '\n';
+        log(line.str());                     
     }
 
     if (pc >= code.size()) {
@@ -103,18 +116,35 @@ void Process::run_one_tick() {
 }
 
 
-void Process::log(const std::string& msg) {
-    std::lock_guard<std::mutex> lk(mtx);
+void Process::log(const std::string& msg)
+{
     if (!log_stream.is_open())
         log_stream.open("logs/" + name + ".txt", std::ios::app);
     log_stream << msg << '\n';
+
+    std::lock_guard<std::mutex> lk(mtx);
+    logs.push_back(msg);
+    if (logs.size() > 50) logs.erase(logs.begin());
+}
+
+std::vector<std::string> Process::recent_logs(size_t n) const {
+    std::lock_guard<std::mutex> lk(mtx);
+    if (logs.size() <= n) return logs;
+    return {logs.end() - n, logs.end()};
 }
 
 void Process::print_smi_info() const
 {
-    std::cout << "===== Process Name: " << name << " =====\n"
-              << "ID: " << id << '\n'
-              << "Current PC: " << pc << '/' << code.size() << '\n';
+    std::cout << "===== Process Name: " << name << " =====\n";
+    std::cout << "ID: " << id << "\n";
+    std::cout << "Recent logs (max 5):\n";
+
+    std::lock_guard<std::mutex> lk(mtx);
+    for (const auto& line : logs)
+        std::cout << line << '\n';
+
+    std::cout << "\nCurrent instruction line: " << pc
+              << '/' << code.size() << '\n';
     if (done) std::cout << "\nFINISHED!\n";
 }
 
@@ -132,6 +162,5 @@ int Process::get_var_or_val(const std::string &s) const
     return it != vars.end() ? it->second : 0;
 }
 
-/* simple accessors */
 void Process::sleep(int t)   { sleep_ticks = t; }
 bool Process::is_finished() const { return done; }

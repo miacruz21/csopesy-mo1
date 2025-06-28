@@ -88,15 +88,18 @@ void Console::print_header() const
 {
     std::cout << get_color_reset();
     std::cout << get_color_green() << banner() << get_color_reset() << std::endl;
-    std::cout << get_color_yellow() << "Welcome to CSOPESY CPU Scheduler Emulator!" << get_color_reset() << std::endl;
-    std::cout << "Type 'help' for available commands or 'initialize' to begin." << std::endl;
+    std::cout << get_color_yellow() << "Welcome to CSOPESY CPU Scheduler Emulator!\n" << get_color_reset() << std::endl;
+    std::cout << get_color_yellow() << "Developers:\n" << get_color_reset() << std::endl;
+    std::cout << get_color_yellow() << "CRUZ, Mia Bernice A.\n" << get_color_reset() << std::endl;
+    std::cout << get_color_yellow() << "DEL MUNDO, Rahmon Khayle\n" << get_color_reset() << std::endl;
+    std::cout << "Type 'help' for available commands or 'initialize' to begin.\n" << std::endl;
 }
 
 void Console::print_prompt() const {
     if (in_process_screen)
-        std::cout << "[PROCESS]> ";
+        std::cout << get_color_blue() << "[PROCESS]> " << get_color_reset();
     else
-        std::cout << "[MAIN]> ";
+        std::cout << get_color_blue() << "[MAIN]> " << get_color_reset();
     std::cout.flush();
 }
 
@@ -128,13 +131,11 @@ void Console::show_help() const
 
 void Console::handle_initialize()
 {
-    /* 1. parse config.txt directly into the member object */
     if (!config_manager.load("config.txt")) {
         std::cerr << "initialize failed: bad config\n";
-        return;                                    // abort on error
+        return;                                
     }
 
-    /* 2. create ProcessManager using the parsed values */
     int      num_cpu = static_cast<int>(config_manager.get_long("num-cpu"));
     auto     sched   = config_manager.get("scheduler");
     uint64_t quantum = config_manager.get_long("quantum-cycles");
@@ -150,39 +151,35 @@ void Console::handle_initialize()
 
 void Console::handle_screen_ls()
 {
-    if (!process_manager) {
-        std::cout << "System not initialized.\n";
-        return;
-    }
+    if (!process_manager) return;
+
     clear_screen();
-    print_header();
-    print_process_summary(std::cout);
+    print_header();                               
+    print_process_summary(std::cout);            
+    process_manager->print_process_lists(std::cout, false); 
+    process_manager->print_recent_logs(std::cout, 5); 
 }
 
 void Console::handle_report_util()
 {
-    if (!process_manager) {
-        std::cout << "System not initialized.\n";
-        return;
-    }
-    clear_screen();
-    print_header();
-    print_process_summary(std::cout);
+    std::ofstream fout("csopesy-log.txt", std::ios::app);
 
-    std::ofstream ofs("csopesy-log.txt", std::ios::app);
-    ofs << banner();
-    print_process_summary(ofs);
+    /* one snapshot → write to file, then to console */
+    process_manager->print_system_status(fout);
+    process_manager->print_process_lists(fout, true);
+    process_manager->print_recent_logs(fout, 5);
 
-    std::cout << "[MAIN]> Report generated at \""
-              << std::filesystem::absolute("csopesy-log.txt") << "\"\n";
+    process_manager->print_system_status(std::cout);
+    process_manager->print_process_lists(std::cout, false);
+    process_manager->print_recent_logs(std::cout, 5);
+
+    std::cout << "\nReport written to csopesy-log.txt\n";
 }
 
 void Console::print_process_summary(std::ostream& out) const
 {
     process_manager->print_system_status(out);
     out << "___________________________________________________________\n";
-
-    process_manager->print_process_lists(out);
 }
 
 void Console::handle_screen_command(const std::string& command) {
@@ -248,7 +245,16 @@ void Console::enter_process_screen(const std::string& process_name) {
     }
 
     while (in_process_screen) {
-        process->print_smi_info();
+        std::cout << "===== Process Name: " << get_color_red() << process->get_name() << get_color_reset() << " =====\n";
+        std::cout << "ID: " << process->get_id() << '\n';
+        std::cout << "Logs:\n";
+        {
+            auto recent = process->recent_logs(5);
+            for (auto& ln : recent) std::cout << ln << '\n';
+        }
+        std::cout << "\nCurrent instruction line: "
+                  << process->get_pc() << '/' << process->get_code_size() << '\n';
+        if (process->is_finished()) std::cout << "\nFINISHED!\n";
         if (process->is_finished()) {
             std::cout << "\nProcess finished – leaving screen.\n";
             break;
@@ -323,7 +329,16 @@ void Console::handle_process_command(const std::string &input)
     }
     if (cmd == "process-smi")
     {
-        process->print_smi_info();
+        std::cout << "===== Process Name: " << process->get_name() << " =====\n";
+        std::cout << "ID: " << process->get_id() << '\n';
+        std::cout << "Logs:\n";
+        {
+            auto recent = process->recent_logs(5);
+            for (auto& ln : recent) std::cout << ln << '\n';
+        }
+        std::cout << "\nCurrent instruction line: "
+                  << process->get_pc() << '/' << process->get_code_size() << '\n';
+        if (process->is_finished()) std::cout << "\nFINISHED!\n";
     }
     else
     {
@@ -345,7 +360,14 @@ void Console::run() {
         }
 
         print_prompt();
-        if (!std::getline(std::cin, input)) break;
+        if (!std::getline(std::cin, input)) {
+            if (std::cin.eof()) {                  // ← hit when the test driver finishes
+                std::cin.clear();                  // reset fail & eof bits
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                continue;                          // stay inside the MAIN loop
+            }
+            break;                                 // real I/O error → bail out
+        }
 
         input.erase(0, input.find_first_not_of(" \t\n\r"));
         input.erase(input.find_last_not_of(" \t\n\r") + 1);

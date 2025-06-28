@@ -23,6 +23,7 @@ public:
     explicit PrintInst(std::string m) : msg(std::move(m)) {}
     void        execute(Process& p) override;
     const char* tag() const override;             // "PRINT"
+    const std::string& get_msg() const { return msg; }
 };
 
 class DeclInst : public Instruction {

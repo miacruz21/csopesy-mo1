@@ -12,49 +12,46 @@ CPUUtilization::CPUUtilization(uint32_t total_cores)
       start_times(total_cores),
       busy_times(total_cores),
       is_busy(total_cores,false),
+      busy_cores_(0),
       t0(std::chrono::steady_clock::now())
 {}
 
-void CPUUtilization::mark_busy(int core) {
+void CPUUtilization::mark_busy(int core)
+{
     std::lock_guard<std::mutex> lk(mtx);
-    if (!is_busy[core]) {                      
-        start_times[core] = std::chrono::steady_clock::now();
+    if (!is_busy[core]) {          // first time this quantum
         is_busy[core] = true;
+        ++busy_cores_;
     }
 }
 
-void CPUUtilization::mark_idle(int core) {
-    auto t1 = std::chrono::steady_clock::now();
+void CPUUtilization::mark_idle(int core)
+{
     std::lock_guard<std::mutex> lk(mtx);
-    if (is_busy[core]) {
-        busy_times[core] += t1 - start_times[core];
+    if (is_busy[core]) {           // only once per quantum
         is_busy[core] = false;
+        --busy_cores_;
     }
 }
 
-int CPUUtilization::get_busy_cores() const {
+int CPUUtilization::get_busy_cores() const
+{
     std::lock_guard<std::mutex> lk(mtx);
-    return std::count(is_busy.begin(), is_busy.end(), true);
+    return static_cast<int>(busy_cores_);
 }
 
-int CPUUtilization::get_available_cores() const {
-    return static_cast<int>(total_cores_) - get_busy_cores();
+int CPUUtilization::get_available_cores() const
+{
+    std::lock_guard<std::mutex> lk(mtx);
+    return static_cast<int>(total_cores_ - busy_cores_);
 }
 
-double CPUUtilization::get_utilization_percent() const {
-    auto now = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(now - t0).count();
-    if (elapsed == 0) return 0.0;
-
+double CPUUtilization::get_utilization_percent() const
+{
     std::lock_guard<std::mutex> lk(mtx);
-    std::chrono::nanoseconds busy{};
-    for (size_t i = 0; i < total_cores_; ++i) {
-        busy += busy_times[i];
-        if (is_busy[i]) busy += now - start_times[i];
-    }
-    double busy_sec  = std::chrono::duration<double>(busy).count();
-    double total_sec = elapsed * total_cores_;
-    return (busy_sec / total_sec) * 100.0;
+    return total_cores_ == 0
+         ? 0.0
+         : (busy_cores_ * 100.0) / static_cast<double>(total_cores_);
 }
 
 int CPUUtilization::get_total_cores() const {

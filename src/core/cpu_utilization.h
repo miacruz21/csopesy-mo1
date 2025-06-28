@@ -21,4 +21,5 @@ private:
     std::vector<bool>                                 is_busy;
     std::chrono::steady_clock::time_point             t0;
     uint32_t                                          total_cores_;
+    uint32_t                         busy_cores_{0};
 };

@@ -31,6 +31,9 @@ public:
     void print_process_lists(std::ostream&) const; 
     void generate_utilization_report() const;
     void shutdown();   
+
+    void print_process_lists(std::ostream& out, bool full = true) const;
+    void print_recent_logs(std::ostream& out, std::size_t max_lines) const;
 private:
     mutable std::mutex procs_mutex;
     std::vector<std::shared_ptr<Process>> procs;
@@ -41,7 +44,7 @@ private:
     CPUUtilization util;
     std::atomic<bool> running = false;
     std::atomic<bool> batching = false;
-    std::thread sched_thread;
     std::thread batch_thread;
     std::atomic<uint64_t> next_id = 1;
+    std::vector<std::thread> workers_;
 };

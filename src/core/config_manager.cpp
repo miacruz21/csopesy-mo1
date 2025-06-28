@@ -36,7 +36,6 @@ bool ConfigManager::load(const std::string& filename)
         if (value.size() >= 2 && value.front()=='"' && value.back()=='"')
             value = value.substr(1, value.size()-2);
 
-        // ---------- per-key validation ----------
         if (key == "num-cpu") {
             long v = std::stol(value);
             if (v < 1 || v > 128) { std::cerr << "num-cpu must be [1,128]\n"; return false; }
@@ -85,7 +84,6 @@ bool ConfigManager::load(const std::string& filename)
     }
     file.close();
 
-    // -------- cross-field checks ----------
     const char* req[] = { "num-cpu","scheduler","quantum-cycles",
                           "batch-process-freq","min-ins","max-ins","delays-per-exec" };
     for (auto k : req)
@@ -93,6 +91,10 @@ bool ConfigManager::load(const std::string& filename)
             std::cerr << "Missing config key: " << k << '\n'; return false;
         }
 
+    if (values["scheduler"] == "rr" && values.count("quantum-cycles") == 0) {
+        std::cerr << "Missing config key: quantum-cycles (required for rr)\n";
+        return false;
+    }
     auto mi = std::stoul(values["min-ins"]);
     auto ma = std::stoul(values["max-ins"]);
     if (mi > ma) {

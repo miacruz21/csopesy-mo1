@@ -7,6 +7,7 @@
 #include <fstream>
 #include <algorithm>
 #include <filesystem>
+#include <bits/basic_string.h>
 
 extern std::atomic<uint64_t> cpu_cycles_counter;
 
@@ -43,41 +44,52 @@ void ProcessManager::initialize_scheduler(const std::string &alg, uint64_t quant
 void ProcessManager::start_scheduler()
 {
     running = true;
-    sched_thread = std::thread([this]()
-                               {
-        while (running) {
-            cpu_cycles_counter++;
-            std::shared_ptr<Process> p;
-            uint64_t quantum = scheduler_is_rr_ ? rr_quantum_cycles_ : 1;
-            {
-                std::lock_guard<std::mutex> lk(procs_mutex);
-                if (sched != nullptr && sched->has_processes())
-                    p = sched->next_process();
-            }
-            if (p) {
-                util.mark_busy(0);
-                for (uint64_t i = 0; i < quantum && !p->is_finished(); ++i) {
+    const auto cores = util.get_total_cores();
+
+    for (uint32_t core = 0; core < cores; ++core) {
+        workers_.emplace_back([this, core]() {
+            while (running) {
+                std::shared_ptr<Process> p;
+                {                               
+                    std::lock_guard<std::mutex> lk(procs_mutex);
+                    if (sched && sched->has_processes())
+                        p = sched->next_process();
+                }
+
+                if (!p) {
+                    util.mark_idle(core);                    
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    continue;
+                }
+
+                util.mark_busy(core);                 
+                p->set_core_id(core);
+
+                const uint64_t q = scheduler_is_rr_ ? rr_quantum_cycles_ : 1;
+                for (uint64_t i = 0; i < q && !p->is_finished(); ++i) {
                     p->run_one_tick();
                     std::this_thread::sleep_for(std::chrono::milliseconds(30));
                 }
-                util.mark_idle(0);  
+
+                p->set_core_id(-1);
+                util.mark_idle(core);                       
+
                 if (!p->is_finished()) {
                     std::lock_guard<std::mutex> lk(procs_mutex);
                     sched->add_process(p);
                 }
             }
-            else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(30));
-            }
-
-        } });
+        });
+    }
 }
+
 
 void ProcessManager::stop_scheduler()
 {
     running = false;
-    if (sched_thread.joinable())
-        sched_thread.join();
+    for (auto& t : workers_)
+        if (t.joinable()) t.join();
+    workers_.clear();
 }
 
 void ProcessManager::start_batch_processing()
@@ -149,29 +161,70 @@ std::shared_ptr<Process> ProcessManager::get_or_create_process(const std::string
 
 void ProcessManager::print_system_status(std::ostream& out) const
 {
-    out << "CPU utilization: " << std::fixed << std::setprecision(1)
-        << util.get_utilization_percent() << "%\n"
-        << "Cores used: "      << util.get_busy_cores()      << '\n'
-        << "Cores available: " << util.get_available_cores() << "\n\n";
+    const auto total = util.get_total_cores();
+    const auto busy  = util.get_busy_cores();
+
+    out << "CPU utilization : "
+        << std::fixed << std::setprecision(1)
+        << util.get_utilization_percent() << " %\n"
+        << "Cores used      : " << busy  << '/' << total << '\n'
+        << "Cores available : " << (total - busy) << "\n\n";
 }
 
-void ProcessManager::print_process_lists(std::ostream& out) const
+void ProcessManager::print_recent_logs(std::ostream& out,
+                                       std::size_t max_lines) const
 {
-    std::lock_guard<std::mutex> lk(procs_mutex);
+    std::vector<std::shared_ptr<Process>> snapshot;
+    {
+        std::lock_guard<std::mutex> lk(procs_mutex);
+        snapshot = procs;             // copy the shared_ptrs
+    }
 
-    out << "Running processes:\n";
-    for (auto& p : procs)
-        if (!p->is_finished())
-            out << p->get_name() << "\t"
-                << util::now_time() << " Core:" << 0 << "  "
-                << p->get_pc() << '/' << p->get_code_size() << '\n';
+    out << "\nRecent logs (newest first, max " << max_lines << "):\n";
+    for (auto const& p : snapshot)
+        for (auto const& line : p->recent_logs(max_lines))
+            out << "  " << line << '\n';
+}
 
-    out << "\nFinished processes:\n";
-    for (auto& p : procs)
-        if (p->is_finished())
-            out << p->get_name() << '\t'
-                << p->get_finished_time() << " FINISHED  "
-                << p->get_code_size() << '/' << p->get_code_size() << '\n';
+void ProcessManager::print_process_lists(std::ostream& out,
+                                         bool full) const
+{
+
+    std::vector<std::shared_ptr<Process>> running, finished;
+    {
+        std::lock_guard<std::mutex> lk(procs_mutex);
+        running.reserve(procs.size());
+        finished.reserve(procs.size());
+        for (auto const& p : procs)
+            (p->is_finished() ? finished : running).push_back(p);
+    } 
+
+    auto dump = [&](auto const& vec, std::string_view title)
+    {
+        out << title << '\n';
+        std::size_t shown = 0;
+        const bool isRunning = title.compare(0, 7, "Running") == 0;
+
+        for (auto const& p : vec) {
+            if (!full && shown == 5) { out << "…\n"; break; }
+
+            if (isRunning) {
+                out << std::left << std::setw(15) << p->get_name() << ' '
+                    << util::now_time() << "  Core:" << p->get_core_id() << "  "
+                    << p->get_pc() << '/' << p->get_code_size() << '\n';
+            } else {
+                out << std::left << std::setw(15) << p->get_name() << ' '
+                    << p->get_finished_time() << "  FINISHED  "
+                    << p->get_code_size() << '/' << p->get_code_size() << '\n';
+            }
+            ++shown;
+        }
+        out << '\n';
+    };
+
+
+    dump(running , "Running processes:");
+    dump(finished, "Finished processes:");
     out << "___________________________________________________________\n";
 }
 
@@ -186,9 +239,11 @@ void ProcessManager::generate_utilization_report() const
 
 void ProcessManager::shutdown()
 {
-    running = false;                  
-    if (sched_thread.joinable())
-        sched_thread.join();
+    running = false;
+
+    for (auto& t : workers_)
+        if (t.joinable()) t.join();
+    workers_.clear();
 
     if (batch_thread.joinable())
         batch_thread.join();
