@@ -73,19 +73,21 @@ void Console::clear_screen() const
 #endif
 }
 
-const std::string Console::HEADER = R"(
-    _____  _____  ____  _____  ______  _______    __
-   / ____|/ ____|/ __ \|  __ \|  ____|/ ____|\ \  / /
-  | |    | (___ | |  | | |__) | |__  | (___  \ \_/ /
-  | |     \___ \| |  | |  ___/|  __|  \___ \  \  /
-  | |____ ____) | |__| | |    | |____ ____) |  | |
-   \_____|_____/ \____/|_|    |______|_____/   |_|
-)";
+std::string Console::banner() const {
+    return
+"    _____  _____  ____  _____  ______  _______    __\n"
+"   / ____|/ ____|/ __ \\|  __ \\|  ____|/ ____|\\ \\  / /\n"
+"  | |    | (___ | |  | | |__) | |__  | (___  \\ \\_/ /\n"
+"  | |     \\___ \\| |  | |  ___/|  __|  \\___ \\  \\  /\n"
+"  | |____ ____) | |__| | |    | |____ ____) |  | |\n"
+"   \\_____|_____/ \\____/|_|    |______|_____/   |_|\n"
+"____________________________________________________________\n";
+}
 
 void Console::print_header() const
 {
     std::cout << get_color_reset();
-    std::cout << get_color_green() << HEADER << get_color_reset() << std::endl;
+    std::cout << get_color_green() << banner() << get_color_reset() << std::endl;
     std::cout << get_color_yellow() << "Welcome to CSOPESY CPU Scheduler Emulator!" << get_color_reset() << std::endl;
     std::cout << "Type 'help' for available commands or 'initialize' to begin." << std::endl;
 }
@@ -146,6 +148,42 @@ void Console::handle_initialize()
     std::cout << "System initialized successfully.\n";
 }
 
+void Console::handle_screen_ls()
+{
+    if (!process_manager) {
+        std::cout << "System not initialized.\n";
+        return;
+    }
+    std::cout << banner();
+    print_process_summary(std::cout);
+}
+
+void Console::handle_report_util()
+{
+    if (!process_manager) {
+        std::cout << "System not initialized.\n";
+        return;
+    }
+
+    std::cout << banner();
+    print_process_summary(std::cout);
+
+    std::ofstream ofs("csopesy-log.txt", std::ios::app);
+    ofs << banner();
+    print_process_summary(ofs);
+
+    std::cout << "[MAIN]> Report generated at \""
+              << std::filesystem::absolute("csopesy-log.txt") << "\"\n";
+}
+
+void Console::print_process_summary(std::ostream& out) const
+{
+    process_manager->print_system_status(out);
+    out << "___________________________________________________________\n";
+
+    process_manager->print_process_lists(out);
+}
+
 void Console::handle_screen_command(const std::string& command) {
     std::istringstream iss(command);
     std::string cmd_root, sub_cmd, process_name;
@@ -172,7 +210,7 @@ void Console::handle_screen_command(const std::string& command) {
             std::cerr << "Error: " << e.what() << "\n";
         }
     } else if (sub_cmd == "-ls") {
-        process_manager->print_system_status();
+        handle_screen_ls();
     } else if (sub_cmd == "-r") {
         if (process_name.empty()) {
             std::cout << "Usage: screen -r <process_name>\n";
@@ -223,10 +261,10 @@ void Console::enter_process_screen(const std::string& process_name) {
         if (cmd == "exit") {
             in_process_screen = false;
             clear_screen();
-            print_header(); // restores main menu art and prompt
+            print_header();
             break;
         } else if (cmd == "process-smi") {
-            clear_screen(); // next loop will reprint
+            clear_screen();
         } else {
             std::cout << "Invalid command. Use 'process-smi' or 'exit'.\n";
         }
@@ -245,21 +283,6 @@ void Console::stop()
     if (process_manager)   
         process_manager->shutdown();
     exit_requested = true;      
-}
-
-void Console::handle_report_command()
-{
-    if (!process_manager) {
-        std::cout << "System not initialized.\n";
-        return;
-    }
-
-    process_manager->generate_utilization_report();
-
-    // Echo same info to console so users see it immediately
-    std::ostringstream oss;
-    process_manager->print_system_status(oss);   // already exists
-    std::cout << oss.str();
 }
 
 void Console::handle_scheduler_start()
@@ -345,7 +368,7 @@ void Console::run() {
         else if (command_base == "screen") handle_screen_command(input);
         else if (command_base == "scheduler-start" || command_base == "scheduler-test") handle_scheduler_start();
         else if (command_base == "scheduler-stop") handle_scheduler_stop();
-        else if (command_base == "report-util") handle_report_command();
+        else if (command_base == "report-util")  handle_report_util();
         else std::cout << "Invalid command. Type 'help' for available commands.\n";
     }
     std::cout << "Terminating console. Goodbye!\n";

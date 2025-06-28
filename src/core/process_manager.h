@@ -28,7 +28,7 @@ public:
     std::shared_ptr<Process> get_or_create_process(const std::string &name);
 
     void print_system_status(std::ostream& out) const;
-    void print_system_status() const;
+    void print_process_lists(std::ostream&) const; 
     void generate_utilization_report() const;
     void shutdown();   
 private:

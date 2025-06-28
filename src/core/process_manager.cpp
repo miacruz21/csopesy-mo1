@@ -147,66 +147,32 @@ std::shared_ptr<Process> ProcessManager::get_or_create_process(const std::string
     return p;
 }
 
-void ProcessManager::print_system_status(std::ostream& out) const {
-    size_t running = 0, finished = 0;
-    {
-        std::lock_guard<std::mutex> lk(procs_mutex);
-        for (const auto& proc : procs)
-            if (proc->is_finished()) ++finished; else ++running;
-    }
-
-    // Get CPU utilization and core stats
-    double util_percent = util.get_utilization_percent();
-    int cores_used = util.get_busy_cores();
-    int total = cores_used + util.get_available_cores();
-
-    out << "\n--------------------------------------------------\n";
-    out << "CPU utilization: " << format_percent(util_percent) << "%\n";
-    out << "Cores used: " << cores_used << "\n";
-    out << "Cores available: " << (total - cores_used) << "\n";
-    out << "--------------------------------------------------\n";
-
-    out << "Running processes:\n";
-    out << std::left << std::setw(16) << "Process"
-        << std::setw(24) << "Created"
-        << std::setw(8) << "Core"
-        << std::setw(16) << "Instr/Total"
-        << "\n";
-
-    {
-        std::lock_guard<std::mutex> lk(procs_mutex);
-        for (const auto& proc : procs) {
-            if (!proc->is_finished()) {
-                out << std::left << std::setw(16) << proc->get_name()
-                    << std::setw(24) << proc->get_created_time()
-                    << std::setw(8) << proc->get_core_id()
-                    << std::setw(16) << (std::to_string(proc->get_pc()) + "/" + std::to_string(proc->get_code_size()))
-                    << "\n";
-            }
-        }
-    }
-
-    out << "\nFinished processes:\n";
-    out << std::left << std::setw(16) << "Process"
-        << std::setw(24) << "Finished"
-        << std::setw(16) << "Instr/Total"
-        << "\n";
-    {
-        std::lock_guard<std::mutex> lk(procs_mutex);
-        for (const auto& proc : procs) {
-            if (proc->is_finished()) {
-                out << std::left << std::setw(16) << proc->get_name()
-                    << std::setw(24) << proc->get_finished_time()
-                    << std::setw(16) << (std::to_string(proc->get_code_size()) + "/" + std::to_string(proc->get_code_size()))
-                    << "\n";
-            }
-        }
-    }
-    out << "--------------------------------------------------\n";
+void ProcessManager::print_system_status(std::ostream& out) const
+{
+    out << "CPU utilization: " << std::fixed << std::setprecision(1)
+        << util.get_utilization_percent() << "%\n"
+        << "Cores used: "      << util.get_busy_cores()      << '\n'
+        << "Cores available: " << util.get_available_cores() << "\n\n";
 }
 
-void ProcessManager::print_system_status() const {
-    print_system_status(std::cout);
+void ProcessManager::print_process_lists(std::ostream& out) const
+{
+    std::lock_guard<std::mutex> lk(procs_mutex);
+
+    out << "Running processes:\n";
+    for (auto& p : procs)
+        if (!p->is_finished())
+            out << p->get_name() << "\t"
+                << util::now_time() << " Core:" << 0 << "  "
+                << p->get_pc() << '/' << p->get_code_size() << '\n';
+
+    out << "\nFinished processes:\n";
+    for (auto& p : procs)
+        if (p->is_finished())
+            out << p->get_name() << '\t'
+                << p->get_finished_time() << " FINISHED  "
+                << p->get_code_size() << '/' << p->get_code_size() << '\n';
+    out << "___________________________________________________________\n";
 }
 
 void ProcessManager::generate_utilization_report() const

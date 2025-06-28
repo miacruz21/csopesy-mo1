@@ -15,7 +15,6 @@ public:
     void stop();
     
 private:
-    static const std::string HEADER;
     std::unique_ptr<ProcessManager> process_manager;
     ConfigManager config_manager;
     bool initialized = false;
@@ -39,17 +38,19 @@ private:
     void clear_screen() const;
 
     // Handlers
+    void handle_screen_ls(); 
     void handle_initialize();
     void handle_screen_command(const std::string& command);
-    void handle_report_command();
+    void handle_report_util();
     void handle_scheduler_start();
     void handle_scheduler_stop();
     void handle_process_command(const std::string& input);
     void enter_process_screen(const std::string& process_name);
     void exit_process_screen();
 
+    std::string banner() const;
+    void print_process_summary(std::ostream& out) const;
+
     // Helpers
     std::vector<std::string> split(const std::string& s);
-    void handle_report_util();
-
 };
