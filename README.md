@@ -52,7 +52,7 @@ int main() {
 
 `screen -ls`:    	Utilisation + running/finished tables
 
-`scheduler-start` / `scheduler/stop`:    Toggle automatic batch-process thread
+`scheduler-test` / `scheduler/stop`:    Toggle automatic batch-process thread
 
 `report-uti`:    	Print and append CPU-utilisation block to csopesy-log.txt
 

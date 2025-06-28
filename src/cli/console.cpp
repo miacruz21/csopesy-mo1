@@ -119,7 +119,7 @@ void Console::show_help() const
         std::cout << "    screen -s <name>    - Create a new process and attach to its screen.\n";
         std::cout << "    screen -ls          - List all running and finished processes.\n";
         std::cout << "    screen -r <name>    - Re-attach to a running process's screen.\n";
-        std::cout << "    scheduler-start     - Start automatically generating dummy processes.\n";
+        std::cout << "    scheduler-test     - Start automatically generating dummy processes.\n";
         std::cout << "    scheduler-stop      - Stop generating dummy processes.\n";
         std::cout << "    report-util         - Generate and save CPU utilization report to csopesy-log.txt.\n";
         std::cout << "    exit                - Terminate the console.\n";
@@ -395,7 +395,7 @@ void Console::run() {
         else if (command_base == "help") show_help();
         else if (command_base == "clear") clear_screen();
         else if (command_base == "screen") handle_screen_command(input);
-        else if (command_base == "scheduler-start" || command_base == "scheduler-test") handle_scheduler_start();
+        else if (command_base == "scheduler-test" || command_base == "scheduler-test") handle_scheduler_start();
         else if (command_base == "scheduler-stop") handle_scheduler_stop();
         else if (command_base == "report-util")  handle_report_util();
         else std::cout << "Invalid command. Type 'help' for available commands.\n";
