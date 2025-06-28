@@ -14,7 +14,10 @@ void PrintInst::execute(Process& p)
     p.log(oss.str());
 }
 
-void DeclInst::execute(Process& p) { p.set_var(var, value); }
+void DeclInst::execute(Process& p) { 
+    p.set_var(var, value);
+    p.log("DECL " + var + "=" + std::to_string(value)); 
+}
 
 void MathInst::execute(Process& p) {
     int a = p.get_var_or_val(op1);
@@ -24,9 +27,14 @@ void MathInst::execute(Process& p) {
     if (res64 < 0)     res64 = 0;
     if (res64 > 65535) res64 = 65535;
     p.set_var(dest, static_cast<int>(res64));
+
+    p.log(std::string(is_add ? "ADD " : "SUB ") + dest);
 }
 
-void SleepInst::execute(Process& p) { p.sleep(ticks); }
+void SleepInst::execute(Process& p) {
+    p.sleep(ticks);
+    p.log("SLEEP " + std::to_string(ticks));  
+}
 
 void ForInst::execute(Process& p) {
     if (repeats <= 0) return; 
@@ -37,6 +45,8 @@ void ForInst::execute(Process& p) {
             ++current; index = 0;
         }
     }
+    if (current == repeats && index == 0)
+        p.log("FOR x" + std::to_string(repeats) + " DONE");
 }
 
 const char* PrintInst::tag() const  { return "PRINT"; }
