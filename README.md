@@ -27,8 +27,21 @@ g++ -std=c++17 -Isrc ^
 
 # Place a valid config.txt next to the exe
 ./csopesy.exe
+```
 
----
+## 3. Entry Point
+File: `src/main.cpp`
+Function:
+```bash
+#include "cli/console.h"
+
+int main() {
+    auto app = std::make_unique<Console>();
+    app->run();
+}
+```
+
+## 4. Primary Commands
 
 
 
