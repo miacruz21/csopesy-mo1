@@ -1,5 +1,4 @@
 settings.json
 csopesy.exe
-*.txt
-*.patch
+config.txt
 tests/
